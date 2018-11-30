@@ -2,6 +2,7 @@ package com.winterfell.arun.videomaker;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -45,9 +46,12 @@ public class RecordVideo extends AppCompatActivity{
     private int RECORDING_STATE = 0;
 
     private String TAG = "RecordActivity";
+    String outputfile;
+    String audioPath;
     private Uri uri;
     private TextureView cameraView;
     private Button record_btn;
+    private Button save_btn;
     private CameraManager cameraManager;
     private MediaRecorder recorder;
     private String cameraId;
@@ -57,12 +61,13 @@ public class RecordVideo extends AppCompatActivity{
     private Handler backgroundHandler;
     private MediaRecorder mediaRecorder;
     CaptureRequest.Builder captureRequestBuilder;
+    CameraCaptureSession previewSession;
     MediaPlayer mediaPlayer;
     CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice camera) {
             cameraDevice= camera;
-            createCaptureSession();
+            startCameraPreview();
         }
 
         @Override
@@ -86,13 +91,20 @@ public class RecordVideo extends AppCompatActivity{
 
         cameraView =  findViewById(R.id.cameraview);
         record_btn = findViewById(R.id.record_btn);
+        save_btn = findViewById(R.id.save_btn);
 
+        audioPath = getIntent().getStringExtra("audio");
 
 //        uri = Uri.parse("android.resources://com.winterfell.arun.videomaker/raw/bgmusic.mp3");
-        int resID = getResources().getIdentifier("bgmusic","raw","com.winterfell.arun.videomaker");
-        mediaPlayer = MediaPlayer.create(this,resID);
-        //            mediaPlayer.setDataSource(this,uri);
-//            mediaPlayer.prepare();
+//        int resID = getResources().getIdentifier("bgmusic","raw","com.winterfell.arun.videomaker");
+//        mediaPlayer = MediaPlayer.create(this,resID);
+        mediaPlayer = new MediaPlayer();
+        try {
+            mediaPlayer.setDataSource(audioPath);
+            mediaPlayer.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         record_btn.setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -114,6 +126,13 @@ public class RecordVideo extends AppCompatActivity{
         mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mediaPlayer) {
+                stopRecording();
+            }
+        });
+
+        save_btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
                 stopRecording();
             }
         });
@@ -162,6 +181,18 @@ public class RecordVideo extends AppCompatActivity{
         backgroundHandler = null;
     }
 
+    private void startCameraPreview() {
+        closePreviewSession();
+        createCaptureSession();
+    }
+
+    private void closePreviewSession(){
+        if (previewSession != null){
+            previewSession.close();
+            previewSession = null;
+        }
+    }
+
     private void createCaptureSession() {
         SurfaceTexture surfaceTexture = cameraView.getSurfaceTexture();
         surfaceTexture.setDefaultBufferSize(size.getWidth(), size.getHeight());
@@ -172,9 +203,10 @@ public class RecordVideo extends AppCompatActivity{
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     try {
+                        previewSession = cameraCaptureSession;
                         captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                         captureRequestBuilder.addTarget(surface);
-                        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
+                        previewSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
 
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
@@ -197,6 +229,7 @@ public class RecordVideo extends AppCompatActivity{
         try {
             mediaRecorder.pause();
         }catch (Exception e){
+            startCameraPreview();
             e.printStackTrace();
         }
     }
@@ -221,12 +254,17 @@ public class RecordVideo extends AppCompatActivity{
         try {
             mediaRecorder.stop();
             mediaRecorder.reset();
-            onResume();
+//            startCameraPreview();
         }catch (Exception e){
             e.printStackTrace();
         }
 
-//        mediaPlayer.reset();
+        mediaPlayer.reset();
+
+        Intent intent = new Intent(RecordVideo.this,SaveActivity.class);
+        intent.putExtra("outputfile",outputfile);
+        intent.putExtra("audio",audioPath);
+        startActivity(intent);
     }
 
     @Override
@@ -275,6 +313,19 @@ public class RecordVideo extends AppCompatActivity{
         super.onPause();
         Log.d(TAG, "onPause: ");
         closeBackgroundHandler();
+        closePreviewSession();
+
+        if (cameraDevice != null){
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+
+        if (mediaRecorder != null) {
+            mediaRecorder.release();
+            mediaRecorder = null;
+        }
+
+        mediaPlayer.pause();
     }
 
     @Override
@@ -293,11 +344,11 @@ public class RecordVideo extends AppCompatActivity{
         mediaRecorder = new MediaRecorder();
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-        String outputfile = getOutputFilePath();
+        outputfile = getOutputFilePath();
         mediaRecorder.setOutputFile(outputfile);
         Log.d(TAG, "setMediaRecorder: "+outputfile);
         mediaRecorder.setVideoSize(size.getWidth(), size.getHeight());
-        mediaRecorder.setVideoEncodingBitRate(10000000);
+        mediaRecorder.setVideoEncodingBitRate(5000000);
         mediaRecorder.setVideoFrameRate(30);
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
         mediaRecorder.setOrientationHint(90);
