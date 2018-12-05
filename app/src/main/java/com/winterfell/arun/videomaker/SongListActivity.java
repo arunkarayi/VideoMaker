@@ -14,8 +14,15 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.RelativeLayout;
+import android.widget.Toast;
 
+import java.io.File;
 import java.util.ArrayList;
+
+import cafe.adriel.androidaudioconverter.AndroidAudioConverter;
+import cafe.adriel.androidaudioconverter.callback.IConvertCallback;
+import cafe.adriel.androidaudioconverter.model.AudioFormat;
 
 public class SongListActivity extends AppCompatActivity {
 
@@ -23,6 +30,8 @@ public class SongListActivity extends AppCompatActivity {
     ArrayList<String> songList;
     ArrayList<String> songPathList;
     ArrayAdapter<String> stringArrayAdapter;
+
+    RelativeLayout progress_lyt;
 
     ListView listview;
 
@@ -34,6 +43,7 @@ public class SongListActivity extends AppCompatActivity {
         setContentView(R.layout.activity_song_list);
 
         listview = findViewById(R.id.listview);
+        progress_lyt = findViewById(R.id.progress_lyt);
     }
 
     @Override
@@ -62,11 +72,46 @@ public class SongListActivity extends AppCompatActivity {
         listview.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                Intent intent= new Intent(SongListActivity.this,RecordVideo.class);
-                intent.putExtra("audio",songPathList.get(i));
-                startActivity(intent);
+
+                listview.setVisibility(View.GONE);
+                progress_lyt.setVisibility(View.VISIBLE);
+                String aacfile = songPathList.get(i).replace(".mp3",".aac");
+                if (new File(aacfile).exists()){
+                    gotoCameraActivity(new File(aacfile), songPathList.get(i));
+                }else {
+                    convertMp3toAac(songPathList.get(i));
+                }
             }
         });
+    }
+    private void convertMp3toAac(final String audioFile) {
+        IConvertCallback iConvertCallback = new IConvertCallback() {
+            @Override
+            public void onSuccess(File file) {
+                gotoCameraActivity(file, audioFile);
+                Toast.makeText(SongListActivity.this,file.getAbsolutePath(),Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                e.printStackTrace();
+            }
+        };
+
+        AndroidAudioConverter.with(SongListActivity.this)
+                .setFile(new File(audioFile))
+                .setFormat(AudioFormat.AAC)
+                .setCallback(iConvertCallback)
+                .convert();
+    }
+
+    private void gotoCameraActivity(File file, String audioFile) {
+        Intent intent= new Intent(SongListActivity.this,RecordVideo.class);
+        intent.putExtra("audio",audioFile);
+        intent.putExtra("aacfile",file.getAbsolutePath());
+        startActivity(intent);
+        listview.setVisibility(View.VISIBLE);
+        progress_lyt.setVisibility(View.GONE);
     }
 
     private void getMusic() {

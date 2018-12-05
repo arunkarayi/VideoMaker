@@ -264,7 +264,9 @@ public class RecordVideo extends AppCompatActivity{
         Intent intent = new Intent(RecordVideo.this,SaveActivity.class);
         intent.putExtra("outputfile",outputfile);
         intent.putExtra("audio",audioPath);
+        intent.putExtra("aacfile",getIntent().getStringExtra("aacfile"));
         startActivity(intent);
+        finish();
     }
 
     @Override
